@@ -27,9 +27,13 @@
 - npm >= 6
 
 ### 安装
+
 bash
+
 git clone <repository-url>
+
 cd notion-web-clipper
+
 npm install
 
 
@@ -41,13 +45,17 @@ npm install
    - Redirect URI
 
 2. 创建 `.env` 文件并填入以下配置:
+   
 NOTION_CLIENT_ID=your_client_id
+
 NOTION_CLIENT_SECRET=your_client_secret
+
 NOTION_REDIRECT_URI=http://localhost:3000/auth/notion/callback
 
-3. 获取 Gemini API Key 并在应用中配置
+4. 获取 Gemini API Key 并在应用中配置
 
 ### 运行
+
 npm start
 
 访问 http://localhost:3000 开始使用
