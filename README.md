@@ -26,17 +26,6 @@
 - Node.js >= 14
 - npm >= 6
 
-### 安装
-
-bash
-
-git clone <repository-url>
-
-cd notion-web-clipper
-
-npm install
-
-
 ### 配置
 
 1. 在 Notion 开发者平台创建应用并获取以下信息:
@@ -52,7 +41,7 @@ NOTION_CLIENT_SECRET=your_client_secret
 
 NOTION_REDIRECT_URI=http://localhost:3000/auth/notion/callback
 
-4. 获取 Gemini API Key 并在应用中配置
+3. 获取 Gemini API Key 并在应用中配置
 
 ### 运行
 
