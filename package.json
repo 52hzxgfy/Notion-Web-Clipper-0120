@@ -1,0 +1,17 @@
+{
+  "name": "my-express-app",
+  "version": "1.0.0",
+  "description": "A simple Express web application",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "axios": "^1.7.9",
+    "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "puppeteer": "^24.1.0"
+  }
+}

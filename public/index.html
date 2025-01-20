@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notion Web Clipper</title>
+    <style>
+        body {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: #f5f7fa;
+            color: #2d3748;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #4a5568;
+        }
+        input[type="text"], input[type="password"] {
+            padding: 10px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            width: 100%;
+            max-width: 400px;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus, input[type="password"]:focus {
+            outline: none;
+            border-color: #4299e1;
+        }
+        button {
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            background: #4299e1;
+            color: white;
+        }
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(66, 153, 225, 0.2);
+        }
+        button:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        #notion-auth-btn {
+            background: #000;
+        }
+        #notion-auth-btn:hover {
+            background: #2d3748;
+        }
+        #create-notion-db-btn {
+            background: #48bb78;
+        }
+        #create-notion-db-btn:hover {
+            background: #38a169;
+        }
+        #save-by-ai-btn {
+            background: #667eea;
+            padding: 12px 24px;
+            font-size: 1.1em;
+        }
+        #save-by-ai-btn:hover {
+            background: #5a67d8;
+        }
+        #save-by-selector-btn {
+            background: #ed64a6;
+            padding: 12px 24px;
+            font-size: 1.1em;
+        }
+        #save-by-selector-btn:hover {
+            background: #d53f8c;
+        }
+        .note {
+            font-size: 0.9em;
+            color: #718096;
+            margin-top: 6px;
+        }
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            border: 3px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        .key-input-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            max-width: 500px;
+            margin-bottom: 24px;
+        }
+        .key-input-container input[type="password"] {
+            flex: 1;
+        }
+        #save-key-btn, #update-key-btn {
+            background: #48bb78;
+            padding: 10px 16px;
+        }
+        #save-key-btn:hover, #update-key-btn:hover {
+            background: #38a169;
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="button-group">
+            <button id="notion-auth-btn">Notion授权</button>
+            <button id="create-notion-db-btn">创建Notion数据库</button>
+        </div>
+
+        <div class="input-group">
+            <label for="gemini-api-key-input">Gemini API Key:</label>
+            <div class="key-input-container">
+                <input type="password" id="gemini-api-key-input" placeholder="输入 Gemini API Key">
+                <button id="save-key-btn" class="hidden">保存密钥</button>
+                <button id="update-key-btn" class="hidden">更新密钥</button>
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label for="web-url-input">输入要保存的网页链接:</label>
+            <input type="text" id="web-url-input">
+        </div>
+
+        <div>
+            <button id="save-by-ai-btn">通过AI一键保存</button>
+            <div class="note">适合用来保存网络文章</div>
+        </div>
+
+        <div>
+            <button id="save-by-selector-btn">使用元素选择器一键保存</button>
+            <div class="note">保存除网络文章外的网页内容</div>
+        </div>
+    </div>
+
+    <script>
+        // 页面加载时从localStorage恢复数据
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedGeminiKey = localStorage.getItem('geminiApiKey');
+            const geminiKeyInput = document.getElementById('gemini-api-key-input');
+            const saveKeyBtn = document.getElementById('save-key-btn');
+            const updateKeyBtn = document.getElementById('update-key-btn');
+            
+            if (savedGeminiKey) {
+                geminiKeyInput.value = savedGeminiKey;
+                geminiKeyInput.readOnly = true;
+                updateKeyBtn.classList.remove('hidden');
+            }
+
+            // 检查Notion授权状态
+            checkAuthStatus();
+        });
+
+        // 监听输入框变化
+        document.getElementById('gemini-api-key-input').addEventListener('input', (e) => {
+            const saveKeyBtn = document.getElementById('save-key-btn');
+            const updateKeyBtn = document.getElementById('update-key-btn');
+            const input = e.target;
+            
+            if (input.value.trim() && !input.readOnly) {
+                saveKeyBtn.classList.remove('hidden');
+            } else {
+                saveKeyBtn.classList.add('hidden');
+            }
+        });
+
+        // 保存密钥按钮点击事件
+        document.getElementById('save-key-btn').addEventListener('click', () => {
+            const geminiKeyInput = document.getElementById('gemini-api-key-input');
+            const saveKeyBtn = document.getElementById('save-key-btn');
+            const updateKeyBtn = document.getElementById('update-key-btn');
+            const key = geminiKeyInput.value.trim();
+            
+            if (!key) {
+                alert('请输入 Gemini API Key');
+                return;
+            }
+            
+            // 保存到 localStorage
+            localStorage.setItem('geminiApiKey', key);
+            
+            // 设置输入框为只读
+            geminiKeyInput.readOnly = true;
+            
+            // 隐藏保存按钮，显示更新按钮
+            saveKeyBtn.classList.add('hidden');
+            updateKeyBtn.classList.remove('hidden');
+            
+            alert('密钥已保存！');
+        });
+
+        // 更新密钥按钮点击事件
+        document.getElementById('update-key-btn').addEventListener('click', () => {
+            const geminiKeyInput = document.getElementById('gemini-api-key-input');
+            const saveKeyBtn = document.getElementById('save-key-btn');
+            const updateKeyBtn = document.getElementById('update-key-btn');
+            
+            // 清空输入框并设置为可编辑
+            geminiKeyInput.value = '';
+            geminiKeyInput.readOnly = false;
+            geminiKeyInput.focus();
+            
+            // 隐藏更新按钮
+            updateKeyBtn.classList.add('hidden');
+            
+            // 如果输入框有值，显示保存按钮
+            if (geminiKeyInput.value.trim()) {
+                saveKeyBtn.classList.remove('hidden');
+            }
+        });
+
+        // 检查授权状态
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch('/api/auth/status');
+                const { authorized } = await response.json();
+                const authBtn = document.getElementById('notion-auth-btn');
+                
+                if (authorized) {
+                    authBtn.textContent = 'Notion已授权';
+                    authBtn.disabled = true;
+                    localStorage.setItem('notionAuthorized', 'true');
+                } else {
+                    authBtn.textContent = 'Notion授权';
+                    authBtn.disabled = false;
+                    localStorage.removeItem('notionAuthorized');
+                }
+            } catch (error) {
+                console.error('checkAuthStatus出错:', error);
+            }
+        }
+
+        // 创建数据库按钮点击事件
+        document.getElementById('create-notion-db-btn').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/create-database', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert(`数据库创建成功！\n点击确定将跳转到新创建的数据库。`);
+                    window.open(data.database_url, '_blank');
+                    localStorage.setItem('databaseCreated', 'true');
+                    document.getElementById('create-notion-db-btn').disabled = true;
+                } else {
+                    alert('创建失败：' + data.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('创建数据库时发生错误，请查看控制台获取详细信息。');
+            }
+        });
+
+        // 页面加载时检查数据库创建状态
+        if (localStorage.getItem('databaseCreated') === 'true') {
+            document.getElementById('create-notion-db-btn').disabled = true;
+        }
+
+        // Notion授权按钮点击事件
+        document.getElementById('notion-auth-btn').addEventListener('click', () => {
+            const width = 600;
+            const height = 800;
+            const left = (screen.width / 2) - (width / 2);
+            const top = (screen.height / 2) - (height / 2);
+            
+            const authWindow = window.open(
+                '/auth/notion',
+                'Notion Authorization',
+                `width=${width},height=${height},left=${left},top=${top}`
+            );
+
+            // 监听授权成功消息
+            window.addEventListener('message', (event) => {
+                if (event.data.type === 'NOTION_AUTH_SUCCESS') {
+                    checkAuthStatus();
+                    authWindow.close();
+                }
+            });
+        });
+
+        // 通过AI一键保存按钮点击事件
+        document.getElementById('save-by-ai-btn').addEventListener('click', async () => {
+            const url = document.getElementById('web-url-input').value;
+            const geminiApiKey = document.getElementById('gemini-api-key-input').value;
+            
+            if (!url || !geminiApiKey) {
+                alert('请输入网址和Gemini API Key');
+                return;
+            }
+            
+            const saveBtn = document.getElementById('save-by-ai-btn');
+            const originalText = saveBtn.textContent;
+            saveBtn.innerHTML = '<span class="spinner"></span>AI处理中...';
+            saveBtn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/save-by-ai', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url, geminiApiKey })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    alert('保存成功！');
+                    window.open(data.pageUrl, '_blank');
+                } else {
+                    console.error('保存失败:', data);
+                    alert(`保存失败：${data.error}\n\n${JSON.stringify(data.details, null, 2)}`);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`保存时发生错误：${error.message}\n请查看控制台获取详细信息。`);
+            } finally {
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+            }
+        });
+
+        // 使用元素选择器一键保存按钮点击事件
+        document.getElementById('save-by-selector-btn').addEventListener('click', () => {
+            const url = document.getElementById('web-url-input').value;
+            if (!url) {
+                alert('请输入网址');
+                return;
+            }
+            
+            const btn = document.getElementById('save-by-selector-btn');
+            const originalText = btn.textContent;
+            btn.innerHTML = '<span class="spinner"></span>加载选择器...';
+            btn.disabled = true;
+            
+            const width = 1200;
+            const height = 800;
+            const left = (screen.width - width) / 2;
+            const top = (screen.height - height) / 2;
+
+            const selectorWindow = window.open(
+                `/selector.html?url=${encodeURIComponent(url)}`,
+                'Content Selector',
+                `width=${width},height=${height},left=${left},top=${top}`
+            );
+
+            // 监听窗口关闭事件
+            const checkWindow = setInterval(() => {
+                if (selectorWindow.closed) {
+                    clearInterval(checkWindow);
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

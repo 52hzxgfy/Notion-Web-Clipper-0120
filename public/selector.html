@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网页内容选择器</title>
+    <style>
+        .selector-controls {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #333;
+            color: white;
+            padding: 10px;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+        }
+        .selector-controls input {
+            padding: 5px;
+            width: 300px;
+            margin-right: 10px;
+        }
+        .selector-controls button {
+            padding: 5px 15px;
+            margin: 0 5px;
+            cursor: pointer;
+        }
+        .preview-panel {
+            position: fixed;
+            right: 0;
+            top: 50px;
+            bottom: 0;
+            width: 300px;
+            background: #f5f5f5;
+            padding: 10px;
+            overflow-y: auto;
+            z-index: 9999;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+        }
+        #content-frame {
+            margin-top: 50px;
+            width: calc(100% - 300px);
+            height: calc(100vh - 50px);
+            border: none;
+        }
+        .preview-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .preview-item:hover {
+            background: #f0f0f0;
+        }
+        .remove-btn {
+            color: red;
+            float: right;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="selector-controls">
+        <input type="text" id="url-input" placeholder="输入网址">
+        <button id="load-btn">加载页面</button>
+        <button id="confirm-btn">确认选择</button>
+        <span style="margin-left: 20px;">已选择: <span id="selection-count">0</span> 个元素</span>
+    </div>
+    
+    <div class="preview-panel">
+        <h3>已选择的内容：</h3>
+        <div id="selected-content"></div>
+    </div>
+
+    <iframe id="content-frame"></iframe>
+
+    <script>
+        const selectedElements = new Set();
+        let currentFrame = null;
+        
+        // 初始化
+        const urlParams = new URLSearchParams(window.location.search);
+        const initialUrl = urlParams.get('url');
+        if (initialUrl) {
+            document.getElementById('url-input').value = initialUrl;
+            loadUrl(initialUrl);
+        }
+
+        // 加载页面
+        document.getElementById('load-btn').addEventListener('click', () => {
+            const url = document.getElementById('url-input').value;
+            loadUrl(url);
+        });
+
+        function loadUrl(url) {
+            const frame = document.getElementById('content-frame');
+            frame.src = `/api/proxy?url=${encodeURIComponent(url)}`;
+            
+            frame.onload = () => {
+                currentFrame = frame;
+                initializeSelector(frame);
+            };
+        }
+
+        function initializeSelector(frame) {
+            try {
+                const doc = frame.contentDocument;
+                
+                function addEventListeners(element) {
+                    element.addEventListener('mouseover', handleMouseOver);
+                    element.addEventListener('mouseout', handleMouseOut);
+                    element.addEventListener('click', handleClick);
+                    
+                    Array.from(element.children).forEach(child => {
+                        addEventListeners(child);
+                    });
+                }
+
+                function handleMouseOver(e) {
+                    if (!e.target.classList.contains('selector-selected')) {
+                        e.target.classList.add('selector-hover');
+                    }
+                    e.stopPropagation();
+                }
+
+                function handleMouseOut(e) {
+                    e.target.classList.remove('selector-hover');
+                    e.stopPropagation();
+                }
+
+                function handleClick(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    const element = e.target;
+                    if (element.classList.contains('selector-selected')) {
+                        element.classList.remove('selector-selected');
+                        selectedElements.delete(element);
+                    } else {
+                        element.classList.add('selector-selected');
+                        selectedElements.add(element);
+                    }
+
+                    updatePreview();
+                }
+
+                addEventListeners(doc.body);
+
+            } catch (error) {
+                console.error('初始化选择器失败:', error);
+                alert('初始化选择器失败：' + error.message);
+            }
+        }
+
+        function updatePreview() {
+            const previewDiv = document.getElementById('selected-content');
+            const countSpan = document.getElementById('selection-count');
+            
+            previewDiv.innerHTML = '';
+            countSpan.textContent = selectedElements.size;
+
+            selectedElements.forEach(element => {
+                const preview = document.createElement('div');
+                preview.className = 'preview-item';
+                
+                const removeBtn = document.createElement('span');
+                removeBtn.className = 'remove-btn';
+                removeBtn.textContent = '&times;';
+                removeBtn.onclick = () => {
+                    element.classList.remove('selector-selected');
+                    selectedElements.delete(element);
+                    updatePreview();
+                };
+                
+                preview.appendChild(removeBtn);
+                preview.appendChild(document.createTextNode(
+                    element.textContent.slice(0, 100) + 
+                    (element.textContent.length > 100 ? '...' : '')
+                ));
+                
+                previewDiv.appendChild(preview);
+            });
+        }
+
+        // 确认选择
+        document.getElementById('confirm-btn').addEventListener('click', async () => {
+            if (selectedElements.size === 0) {
+                alert('请至少选择一个元素');
+                return;
+            }
+
+            const selectedContent = Array.from(selectedElements).map(el => el.outerHTML);
+            const url = document.getElementById('url-input').value;
+
+            try {
+                const response = await fetch('/api/save-by-selector', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        url,
+                        content: selectedContent
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('保存成功！');
+                    if (result.pageUrl) {
+                        window.open(result.pageUrl, '_blank');
+                    }
+                    window.close();
+                } else {
+                    alert('保存失败：' + result.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('保存时发生错误：' + error.message);
+            }
+        });
+    </script>
+</body>
+</html>
